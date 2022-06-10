@@ -1,0 +1,272 @@
+---
+title: "Como tratar Dados Faltantes no software R"
+author: "Suzana de Lima"
+date: "Junho, 2022"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+---
+
+# Introdução
+
+- “The best thing to do with missing values is not to have any”, Gertrude Mary Cox (1900 - 1978);
+
+# Causas de dados faltantes.
+
+- Dados perdidos;
+    
+- Falta ou omissão em respostas de questionários.
+
+# Tipos de dados faltantes.
+
+- MCAR: *Missing Completely at Random*, onde a falta de dados é totalmente aleatória;
+
+- MNAR: *Missing Not at Random*, a falta de dados é correlacionada com características não observáveis;
+
+- MAR: *Missing at Random*, os dados que estão faltando por razões relacionadas a variáveis completamente observadas no conjunto de dados.
+
+# O que devemos fazer quando encontramos dados faltantes? 
+
+- Utilizar apenas aqueles casos com informações completas ou preencher com um valor plausível;
+
+    - Análise de caso completo;
+    
+    - Substituir pela média/mediana;
+    
+    - Métodos baseados em modelos;
+    
+    - Imputação múltipla.
+
+# Passos para a imputação múltipla.
+
+- A ideia de imputação múltipla para dados perdidos foi proposta pela primeira vez por Rubin (1977), então propôs um procedimento de cinco etapas para imputar os dados perdidos: 
+
+
+    1. Imputar os valores perdidos usando um modelo apropriado que incorpore a variação aleatória;
+    
+    2. Repetir a primeira etapa 3-5 vezes;
+    
+    3. Realizar a análise desejada em cada conjunto de dados usando métodos de dados padrão e completos;
+    
+    4. Calcular a média dos valores das estimativas de parâmetros nas amostras de valores ausentes para obter uma estimativa de ponto único;
+    
+    5. Calcular os erros padrão pela média dos erros padrão quadrados das estimativas de valores ausentes.
+    
+    
+# Pacotes que fazem imputação múltipla:
+
+- MICE
+    
+- Amelia
+    
+- missForest
+    
+- Hmisc
+    
+- mi
+    
+# Pacote MICE
+
+- Multivariate Imputation by Chained Equations
+
+- Versão: 3.14.0
+
+- O pacote contêm funções para três fases de imputação múltipla: **gerando de múltiplas imputações**, **Analisando dados imputados**, e **agrupando os resultados das análises**. 
+
+
+# Base de dados
+
+- A base de dados **nhanes** contém dados de Schafer (1997, p. 237);
+
+- O banco contém quatro variáveis: 
+
+    1. **age**: grupo de idade;
+    
+    2. **bmi**: índice de massa corporal;
+    
+    3. **hyp**: status de hipertensão;
+    
+    4. **chl**: nível de colesterol. 
+
+
+# Aplicação 
+
+- Pacotes utilizados
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+require(mice)
+require(VIM)
+require(lattice)
+require(broom)
+require(kableExtra)
+require(ggplot2)
+```
+
+- Base de dados
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+df <- nhanes
+head(df)
+str(df)
+```
+
+- Processamento dos dados
+ 
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+df$age <- as.factor(df$age)
+```
+
+- Inspecionando os dados faltantes
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+apply(df,2, function(x) sum(is.na(x)))
+```
+
+Utilizando o pacote *VIM*
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+coll <- c('#4C98D4','#CC5E85')
+
+aggr_plot <- aggr(df, col= coll, numbers=TRUE, sortVars=TRUE, labels=names(data), cex.axis=.7, gap=3, ylab=c("Proportion of missingness","Pattern"))
+```
+
+- Verificando o padrão de dados faltantes
+
+Utilizando o pacote *MICE*
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+pares <- md.pairs(df)
+```
+
+As variáveis são observadas
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+pares$rr
+```
+
+A primeira variável é observada e a segunda é faltante
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+pares$rm
+```
+
+A primeira variável é faltante e a segunda é observada
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+pares$mr
+```
+
+As variáveis são faltantes
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+pares$mm
+```
+
+- Gráfico para análise bivariada de dados faltantes
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+color <- c('#4C98D4','#CC5E85','#8000FF' )
+marginplot(nhanes[,c("chl","bmi")], col=color, cex=1.5,cex.lab= 1.5, cex.numbers= 1.3, pch=19)
+```
+
+- Modelo com dados completos
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggQQ <-  function(lm) {
+  d = data.frame(std.resid = rstudent(lm))
+  y = quantile(d$std.resid[!is.na(d$std.resid)], c(0.25, 0.75))
+  x = qnorm(c(0.25, 0.75))
+  slope = diff(y)/diff(x)
+  int = y[1L] - slope * x[1L]
+  p <-  ggplot(data=d, aes(sample=std.resid)) +
+    stat_qq(shape=1, size=1) +           
+    labs(title="QQplot",             
+         x="Quantis teóricos",      
+         y="Resíduos") +   
+    geom_abline(slope = slope, intercept = int, linetype="solid", color="red")+
+    theme_bw()
+  return(p)
+}
+
+print(paste("Tamanho da base", dim(df)[1]))
+print(paste("Drop na da base", dim(na.omit(df))[1]))
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+modc <- lm(chl ~ bmi+hyp+age, data = df)
+
+kable(tidy(modc), "html", align = "c") %>% 
+  kable_styling(bootstrap_options = "striped")
+```
+
+- Análise de resíduo do modelo com dados completos
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(modc, aes(modc$fitted.values,rstudent(modc)))+
+  geom_point()+
+  theme(axis.text.x = element_text(size=10, angle=0), axis.text.y = element_text(options(scipen=9999),size=10, angle=0))+
+  xlab("")+
+  ylab("Resíduos Estudentizados")+
+  labs(title="Resíduos vs estimados")+
+  geom_hline(yintercept=0)+
+  geom_hline(yintercept=2, color="red")+
+  geom_hline(yintercept=-2, color="red")+
+  theme_minimal()
+```
+
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+ggQQ(modc)
+```
+
+- Criando imputações
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+imp <- mice(df, printFlag = FALSE, maxit = 40, seed= 2022)
+imp
+```
+
+O método "**pmm**", estima uma regressão linear com os casos completos e depois cria uma variabilidade aletória dos dados imputados a partir da distribuição posteriori preditiva de $\hat{\beta}$ para então produzir um novo conjunto de coeficientes $\beta^*$. Em seguida calcula os valores preditos para **Y**.
+
+
+- Diagnóestico das imputações
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+imp$imp$chl
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+stripplot(imp, pch = 20, cex = 1.2)
+```
+
+- Ajuste do modelo com dados imputados
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+modci <- with(data=imp,exp= lm(chl ~ bmi+hyp+age))
+
+combmod <- pool(modci)
+
+summary(combmod)
+```
+
+- Dados completos vs Dados imputados
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+summary(combmod)
+
+kable(tidy(modc), "html", align = "c") %>% 
+  kable_styling(bootstrap_options = "striped")
+```
+
+
+# Referências
+
+- Van Buuren, S. and K. Groothuis-Oudshoorn, mice: Multivariate Imputation by Chained Equations in R. Journal of Statistical Software, 2011. 45(3): p. 67.
+
+- [Multiple Imputation for Missing Data](https://www.statisticssolutions.com/dissertation-resources/multiple-imputation-for-missing-data/)
+
+- [Getting Started with Multiple Imputation in R](https://data.library.virginia.edu/getting-started-with-multiple-imputation-in-r/#:~:text=Joint%20Multivariate%20Normal%20Distribution%20Multiple,values%20from%20this%20assumed%20distribution.)
+
+* Vink, G., Frank, L. E., Pannekoek, J., and van Buuren, S. (2014). Predictive mean matching imputation of semicontinuous variables. Statistica Neerlandica. 68(1). 61-90.
